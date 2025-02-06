@@ -1,122 +1,71 @@
 import requests
-import json
 import time
-import os
-import random  # Import random for selecting prompts
+import random
 
-# Set up API endpoints and authentication details
-SUNO_API_ENDPOINT = "https://api.suno.ai/v1"
-LOGIN_ENDPOINT = f"{SUNO_API_ENDPOINT}/auth/login"
-GENERATE_MUSIC_ENDPOINT = f"{SUNO_API_ENDPOINT}/music/generate"
-DOWNLOAD_SONG_ENDPOINT = f"{SUNO_API_ENDPOINT}/music/download"
-
-# Set up login options and credentials
-LOGIN_CREDENTIALS = {
-    "Google": {"username": "Harshit.sengar1202@gmail.com", "password": "Harshit@291003"},
-    "Apple": {"username": "your_apple_username", "password": "your_apple_password"},
-    "Discord": {"username": "your_discord_username", "password": "your_discord_password"}
-}
-
-# Set up multiple accounts for switching
-ACCOUNTS = [
-    {"username": "restrainedaudiocodec6913", "password": "account1_password"},
-    {"username": "account2_username", "password": "account2_password"},
-    {"username": "account3_username", "password": "account3_password"}
-]
+# Set up Freesound API endpoint and authentication details
+FREESOUND_API_ENDPOINT = "https://freesound.org/apiv2/search/text/"
+API_KEY = "po8uhWUgIhFoJVs5mfkJzt4JGs9w0K7VbsUgAKaD"  # Replace with your actual Freesound API key
 
 # Set up music generation prompts
-PROMPTS = ["random prompt 1", "random prompt 2", "random prompt 3"]
+PROMPTS = [
+    "Create a relaxing piano piece.",
+    "Generate a cheerful pop song.",
+    "Compose a dramatic orchestral score."
+]
 
-# Function to login to Suno API
-def login(login_option):
-    login_credentials = LOGIN_CREDENTIALS[login_option]
+# Function to search for sounds using Freesound API
+def search_sounds(prompt):
+    headers = {
+        "Authorization": f"Token {API_KEY}"
+    }
+    
+    params = {
+        "query": prompt,
+        "page_size": 5  # Number of results to return
+    }
+    
     for attempt in range(5):  # Retry up to 5 times
-        response = requests.post(LOGIN_ENDPOINT, json={"username": login_credentials["username"], 
-                                                        "password": login_credentials["password"]})
+        response = requests.get(FREESOUND_API_ENDPOINT, headers=headers, params=params)
         
         print("Response Status Code:", response.status_code)
-        print("Response Content:", response.text)
         
         if response.status_code == 200:
-            return response.json().get("access_token")
+            sounds = response.json()["results"]
+            if not sounds:  # Check if there are no results
+                print("No sounds found for the prompt.")
+                return None
+            
+            # Process and display sound information
+            for sound in sounds:
+                print(f"Found sound: {sound['name']} - Preview URL: {sound['previews']['preview-lq-mp3']}")
+            return sounds
+        elif response.status_code == 429:
+            print("Quota exceeded, please check your plan. Retrying after delay...")
+            time.sleep(60)  # Wait for a minute before retrying
         elif response.status_code == 503:
-            print("Service unavailable, retrying...")
+            print("Service unavailable while searching sounds, retrying...")
             time.sleep(2 ** attempt)  # Exponential backoff
         else:
-            print("Login failed:", response.text)
+            print("Error searching sounds:", response.text)
             return None
             
-    print("Max retries reached. Unable to login.")
+    print("Max retries reached. Unable to search sounds.")
     return None
-
-def generate_music(access_token, prompt):
-    headers = {"Authorization": f"Bearer {access_token}"}
-    for attempt in range(5):  # Retry up to 5 times
-        response = requests.post(GENERATE_MUSIC_ENDPOINT, headers=headers, json={"prompt": prompt})
-        
-        print("Response Status Code:", response.status_code)
-        print("Response Content:", response.text)
-        
-        if response.status_code == 200:
-            return response.json()["song_id"]
-        elif response.status_code == 503:
-            print("Service unavailable while generating music, retrying...")
-            time.sleep(2 ** attempt)  # Exponential backoff
-        else:
-            print("Error generating music:", response.text)
-            return None
-            
-    print("Max retries reached. Unable to generate music.")
-    return None
-# Function to download generated song using Suno API
-def download_song(access_token, song_id):
-    headers = {"Authorization": f"Bearer {access_token}"}
-    response = requests.get(DOWNLOAD_SONG_ENDPOINT, headers=headers, params={"song_id": song_id})
-    if response.status_code == 200:
-        with open(f"song_{song_id}.mp3", "wb") as f:
-            f.write(response.content)
-        return True
-    else:
-        return False
-
-# Function to switch accounts if necessary
-def switch_account(accounts, current_account_index):
-    if current_account_index < len(accounts) - 1:
-        return accounts[current_account_index + 1]
-    else:
-        return accounts[0]
 
 # Main script
-current_account_index = 0
-current_account = ACCOUNTS[current_account_index]
-
 while True:
-    # Login to Suno API using the first available login option (you can modify this as needed)
-    access_token = login("Google")  # Change this to the desired login option (Google, Apple, Discord)
-    
-    if access_token is None:
-        print("Error logging in. Switching accounts.")
-        current_account_index += 1
-        current_account = switch_account(ACCOUNTS, current_account_index)
-        continue
-
-    # Generate music using Suno API
+    # Randomly select a prompt from the list
     prompt = random.choice(PROMPTS)
-    song_id = generate_music(access_token, prompt)
     
-    if song_id is None:
-        print("Error generating music. Switching accounts.")
-        current_account_index += 1
-        current_account = switch_account(ACCOUNTS, current_account_index)
-        continue
-
-    # Download generated song using Suno API
-    if not download_song(access_token, song_id):
-        print("Error downloading song. Switching accounts.")
-        current_account_index += 1
-        current_account = switch_account(ACCOUNTS, current_account_index)
-        continue
-
-    print(f"Song generated and downloaded successfully using account {current_account['username']}!")
+    # Search for sounds using Freesound API
+    sounds = search_sounds(prompt)
     
+    if sounds is None:
+        print("Error searching sounds.")
+        continue  # Handle error appropriately
+    
+    # Process and display sound information (for demonstration)
+    for sound in sounds:
+        print(f"Found sound: {sound['name']} - {sound['previews']['preview-lq-mp3']}")
+
     time.sleep(2)  # Wait before the next iteration (adjust as needed)
